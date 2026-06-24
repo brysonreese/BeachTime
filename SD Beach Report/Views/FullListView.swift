@@ -17,7 +17,7 @@ struct FullListView: View {
             return repository.sortedReports(by: selectedSort)
         } else {
             return repository.sortedReports(by: selectedSort).filter {
-                $0.name.localizedCaseInsensitiveContains(searchText)
+                $0.stationName.localizedCaseInsensitiveContains(searchText)
             }
         }
     }

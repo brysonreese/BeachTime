@@ -9,15 +9,12 @@ import SwiftUI
 
 struct DetailsView: View {
     @EnvironmentObject var repository: BeachReportRepository
-    let siteID: Int
+    let stationName: String
     
     var report: BeachReport? {
-        repository.reports.first(where: { $0.siteID == siteID })
+        repository.reports.first(where: { $0.stationName == stationName })
     }
-    @State private var parsedDescription: AttributedString?
-    @State private var parsedAdvisory: AttributedString?
-    @State private var parsedClosure: AttributedString?
-    
+
     var body: some View {
         if let report = report {
             List {
@@ -40,33 +37,13 @@ struct DetailsView: View {
                     Label("Add Favorite", systemImage: "star")
                 }
                 
-                if report.advisory != nil && report.advisory != "" {
-                    Section("Advisories") {
-                        if let advisory = parsedAdvisory {
-                            Text(advisory)
-                        }
-                    }
-                }
-                
-                if report.closure != nil && report.closure != "" {
-                    Section("Closure") {
-                        if let closure = parsedClosure {
-                            Text(closure)
-                        }
-                    }
-                }
                 
                 Section("Description") {
-                    if let parsedDescription = parsedDescription {
-                        Text(parsedDescription)
+                    if report.advisory != nil && report.advisory!.cause != nil {
+                        Text(report.advisory!.cause!)
                             .font(.body)
                     }
                 }
-            }
-            .task(id: siteID) {
-                parsedDescription = report.description.htmlParsed
-                parsedAdvisory = report.advisory?.htmlParsed
-                parsedClosure = report.closure?.htmlParsed
             }
             .navigationTitle(report.cleanName)
             .navigationBarTitleDisplayMode(.inline)

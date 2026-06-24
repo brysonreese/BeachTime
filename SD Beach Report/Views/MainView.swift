@@ -13,9 +13,9 @@ struct MainView: View {
     @State private var confettiTrigger: Int = 0
     
     var statusSummary: some View {
-        let closed = repository.reports.filter { $0.indicatorID == 1 }.count
-        let open = repository.reports.filter { $0.indicatorID == 2 }.count
-        let advisory = repository.reports.filter { $0.indicatorID == 3 }.count
+        let closed = repository.reports.filter { $0.advisory?.type == "Closure" }.count
+        let open = repository.reports.filter { $0.advisory == nil }.count
+        let advisory = repository.reports.filter { $0.advisory?.type == "Posting" }.count
         
         return HStack(spacing: 0) {
             StatusSummaryItem(count: closed, label: "Closed", color: .red, icon: "xmark.circle.fill")
@@ -68,7 +68,7 @@ struct MainView: View {
                     } else {
                         Section(header: Text("Favorites")) {
                             ForEach(repository.favorites) { report in
-                                NavigationLink(destination: DetailsView(siteID: report.siteID)) {
+                                NavigationLink(destination: DetailsView(stationName: report.stationName)) {
                                     BeachReportRow(report: report)
                                 }
                                 .swipeActions(edge: .leading) {

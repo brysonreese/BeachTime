@@ -7,7 +7,6 @@
 
 import Foundation
 internal import Combine
-internal import System
 import SwiftUI
 
 @MainActor
@@ -15,114 +14,116 @@ class BeachReportRepository: ObservableObject {
     @Published var reports: [BeachReport] = []
     @Published var isLoading: Bool = false
     @Published var error: Error?
-    
+
     var favorites: [BeachReport] {
-        let savedIDs = UserDefaults.standard.stringArray(forKey: favoritesKey) ?? []
-        var reports: [BeachReport] = []
-        for dehId in savedIDs {
-            if let report = self.getReportByDehId(dehId) {
-                reports.append(report)
+        let savedNames = UserDefaults.standard.stringArray(forKey: favoritesKey) ?? []
+        var result: [BeachReport] = []
+        for stationName in savedNames {
+            if let beach = self.getBeachByStationName(stationName) {
+                result.append(beach)
             }
         }
-        return reports
+        return result
     }
-    
+
     enum SortOptions: String, Identifiable, CaseIterable {
         case nameAtoZ
         case nameZtoA
         case severityLowtoHigh
         case severityHightoLow
-        
+
         var id: Self {
             self
         }
-        
+
         var title: String {
             switch self {
-                case .nameAtoZ: return "Name: A - Z"
-                case .nameZtoA: return "Name: Z - A"
-                case .severityLowtoHigh: return "Severity: Low - High"
-                case .severityHightoLow: return "Severity: High - Low"
+            case .nameAtoZ: return "Name: A - Z"
+            case .nameZtoA: return "Name: Z - A"
+            case .severityLowtoHigh: return "Severity: Low - High"
+            case .severityHightoLow: return "Severity: High - Low"
             }
         }
     }
-    
+
+    // Lower index = more severe
+    private let severityOrder: [String] = ["Closure", "Posting", "Rain"]
+
+    private func severityRank(for beach: BeachReport) -> Int {
+        guard let type = beach.advisory?.type else { return 999 } // open reports rank lowest severity
+        return severityOrder.firstIndex(of: type) ?? 998
+    }
+
     func sortedReports(by: SortOptions) -> [BeachReport] {
-        let severityOrderHighToLow: [Int] = [1, 3, 2]
-        
         switch by {
-            case .nameAtoZ: return reports.sorted {$0.name < $1.name}
-            case .nameZtoA: return reports.sorted {$0.name > $1.name}
-            case .severityLowtoHigh: return reports.sorted {
-                (severityOrderHighToLow.firstIndex(of: $0.indicatorID) ?? 999) >
-                    (severityOrderHighToLow.firstIndex(of: $1.indicatorID) ?? 999)
-            }
-            case .severityHightoLow: return reports.sorted {
-                (severityOrderHighToLow.firstIndex(of: $0.indicatorID) ?? 999) <
-                    (severityOrderHighToLow.firstIndex(of: $1.indicatorID) ?? 999)
-            }
+        case .nameAtoZ:
+            return reports.sorted { $0.cleanName < $1.cleanName }
+        case .nameZtoA:
+            return reports.sorted { $0.cleanName > $1.cleanName }
+        case .severityLowtoHigh:
+            return reports.sorted { severityRank(for: $0) > severityRank(for: $1) }
+        case .severityHightoLow:
+            return reports.sorted { severityRank(for: $0) < severityRank(for: $1) }
         }
     }
-    
-    private let url = URL(string: "https://www.sdbeachinfo.com/Home/GetTargetByID")!
+
+    private let url = URL(string: "http://127.0.0.1:8000/beach_status")!
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 5 // seconds to wait for a response
-        config.timeoutIntervalForResource = 8 // total time for the whole request
+        config.timeoutIntervalForRequest = 5
+        config.timeoutIntervalForResource = 8
         return URLSession(configuration: config)
     }()
-    
+
     init() {
         Task {
             try await fetchReports()
         }
     }
-    
-    func getReportByDehId(_ dehId: String) -> BeachReport? {
-        return reports.first(where: {$0.dehID == dehId})
+
+    func getBeachByStationName(_ stationName: String) -> BeachReport? {
+        return reports.first(where: { $0.stationName == stationName })
     }
-    
+
     func fetchReports(isRefreshing: Bool = false) async throws {
-        if(!isRefreshing) {
+        if !isRefreshing {
             isLoading = true
         }
         reports = []
         error = nil
-        
+
         do {
             let (data, response) = try await session.data(from: url)
-            
+
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 throw URLError(.badServerResponse)
             }
-            
-            reports = try JSONDecoder().decode([BeachReport].self, from: data).filter { $0.indicatorID != 4 }
+
+            reports = try JSONDecoder().decode([BeachReport].self, from: data)
             await loadFavorites()
         } catch {
             if (error as? URLError)?.code == .cancelled {
             } else {
                 self.error = error
-                
             }
         }
-        
+
         isLoading = false
     }
-    
-    func toggleFavorite(for report: BeachReport) {
-        
-        if let index = reports.firstIndex(where: { $0.dehID == report.dehID }) {
-            let savedIDs = UserDefaults.standard.stringArray(forKey: favoritesKey) ?? []
+
+    func toggleFavorite(for beach: BeachReport) {
+        if let index = reports.firstIndex(where: { $0.stationName == beach.stationName }) {
+            let savedNames = UserDefaults.standard.stringArray(forKey: favoritesKey) ?? []
             if reports[index].favorite {
-                saveFavorites(favorites: savedIDs.filter({ $0 != report.dehID }))
+                saveFavorites(favorites: savedNames.filter { $0 != beach.stationName })
             } else {
-                saveFavorites(favorites: savedIDs + [report.dehID])
+                saveFavorites(favorites: savedNames + [beach.stationName])
             }
             reports[index].favorite.toggle()
         }
     }
-    
-    private let favoritesKey = "favoriteDehIDs"
+
+    private let favoritesKey = "favoriteStationNames"
 
     func saveFavorites(favorites: [String]) {
         UserDefaults.standard.set(favorites, forKey: favoritesKey)
@@ -130,16 +131,16 @@ class BeachReportRepository: ObservableObject {
     }
 
     func loadFavorites() async {
-        let savedIDs = UserDefaults.standard.stringArray(forKey: favoritesKey) ?? []
+        let savedNames = UserDefaults.standard.stringArray(forKey: favoritesKey) ?? []
         for index in reports.indices {
-            reports[index].favorite = savedIDs.contains(reports[index].dehID)
+            reports[index].favorite = savedNames.contains(reports[index].stationName)
         }
     }
-    
+
     func swapFavorites(_ from: IndexSet, _ to: Int) {
-        if var savedIDs = UserDefaults.standard.stringArray(forKey: favoritesKey) {
-            savedIDs.move(fromOffsets: from, toOffset: to)
-            saveFavorites(favorites: savedIDs)
+        if var savedNames = UserDefaults.standard.stringArray(forKey: favoritesKey) {
+            savedNames.move(fromOffsets: from, toOffset: to)
+            saveFavorites(favorites: savedNames)
         }
     }
 }

@@ -22,7 +22,7 @@ struct BeachMapView: View {
             return repository.sortedReports(by: BeachReportRepository.SortOptions.nameAtoZ)
         } else {
             return repository.sortedReports(by: BeachReportRepository.SortOptions.nameAtoZ).filter {
-                $0.name.localizedCaseInsensitiveContains(searchText)
+                $0.beachName.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
@@ -40,8 +40,8 @@ struct BeachMapView: View {
                 ProgressView("Loading...")
             } else {
                 Map(position: $cameraPosition) {
-                    ForEach(repository.reports, id: \.siteID) { report in
-                        Annotation(report.cleanName, coordinate: CLLocationCoordinate2D(
+                    ForEach(repository.reports, id: \.stationName) { report in
+                        Annotation("", coordinate: CLLocationCoordinate2D(
                             latitude: report.latitude,
                             longitude: report.longitude
                         )) {
@@ -73,7 +73,7 @@ struct BeachMapView: View {
                     NavigationStack {
                         if let selected = selectedReport {
                             // detail state
-                            DetailsView(siteID: selected.siteID)
+                            DetailsView(stationName: selected.stationName)
                                 .toolbar {
                                     ToolbarItem(placement: .navigationBarLeading) {
                                         Button {
@@ -107,7 +107,7 @@ struct BeachMapView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                                 .padding(.horizontal, 4)
                                 
-                                ForEach(filteredReports, id: \.siteID) { report in
+                                ForEach(filteredReports, id: \.stationName) { report in
                                     Button {
                                         withAnimation {
                                             selectedReport = report
